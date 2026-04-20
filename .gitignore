@@ -1,0 +1,3 @@
+# Binary exports are huge; GitHub blocks files > 100MB.
+*.glb
+!greenboySceneV6.glb

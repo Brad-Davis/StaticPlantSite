@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Three.js Starter</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; }
+
+    #model-load-status {
+      position: fixed;
+      right: 1rem;
+      bottom: 1rem;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.55rem 0.85rem;
+      border-radius: 10px;
+      background: rgba(20, 22, 28, 0.82);
+      color: #e8eaef;
+      font: 13px/1.35 system-ui, sans-serif;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+      pointer-events: none;
+      max-width: min(280px, calc(100vw - 2rem));
+      transition: opacity 0.45s ease, transform 0.45s ease;
+    }
+
+    #model-load-status[hidden] {
+      display: none;
+    }
+
+    #model-load-status.is-done {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+
+    #model-load-status .spinner {
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      border: 2.5px solid rgba(255, 255, 255, 0.2);
+      border-top-color: #00e5c0;
+      animation: model-load-spin 0.75s linear infinite;
+    }
+
+    #model-load-status.is-error .spinner {
+      display: none;
+    }
+
+    #model-load-status.is-error::before {
+      content: "!";
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #c94a4a;
+      color: #fff;
+      font-weight: 700;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    @keyframes model-load-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    #model-load-status .label {
+      min-width: 0;
+    }
+
+    #model-load-status .title {
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    #model-load-status .detail {
+      margin-top: 0.15rem;
+      font-size: 11px;
+      opacity: 0.78;
+    }
+  </style>
+</head>
+<body>
+  <div id="model-load-status" role="status" aria-live="polite" aria-busy="true">
+    <div class="spinner" aria-hidden="true"></div>
+    <div class="label">
+      <div class="title">Loading 3D scene</div>
+      <div class="detail" id="model-load-detail">Starting…</div>
+    </div>
+  </div>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from "three";
+    import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
+    import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+    const DRACO_DECODER_BASE =
+      "https://unpkg.com/three@0.160.0/examples/jsm/libs/draco/gltf/";
+
+    // Scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xFFFFFF);
+
+    // Camera
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
+    );
+    camera.position.z = 4;
+    camera.position.y = 1.5;
+    camera.rotation.x = -Math.PI / 8;
+
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Geometry + Material + Mesh
+
+    const loadStatusEl = document.getElementById("model-load-status");
+    const loadDetailEl = document.getElementById("model-load-detail");
+
+    function setLoadDetail(text) {
+      if (loadDetailEl) loadDetailEl.textContent = text;
+    }
+
+    function finishLoading(success) {
+      if (!loadStatusEl) return;
+      loadStatusEl.setAttribute("aria-busy", "false");
+      if (success) {
+        setLoadDetail("Ready");
+        loadStatusEl.classList.add("is-done");
+        setTimeout(() => {
+          loadStatusEl.hidden = true;
+        }, 500);
+      } else {
+        loadStatusEl.classList.add("is-error");
+        loadStatusEl.style.pointerEvents = "auto";
+      }
+    }
+
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath(DRACO_DECODER_BASE);
+
+    const loader = new GLTFLoader();
+    loader.setDRACOLoader(dracoLoader);
+
+    let model;
+    loader.load(
+    "./greenboySceneV6.glb", // path to your GLB file
+    (gltf) => {
+        model = gltf.scene;
+
+        // Optional: adjust position / scale
+        model.scale.set(1, 1, 1);
+        model.position.set(0, -2, -2);
+        model.rotation.y = -Math.PI / 2;
+
+        scene.add(model);
+        dracoLoader.dispose();
+        finishLoading(true);
+    },
+    (xhr) => {
+        const total = xhr.total;
+        if (total > 0) {
+          const pct = Math.round((xhr.loaded / total) * 100);
+          setLoadDetail(`${pct}% · ${formatBytes(xhr.loaded)} / ${formatBytes(total)}`);
+        } else {
+          setLoadDetail(`${formatBytes(xhr.loaded)} downloaded…`);
+        }
+    },
+    (error) => {
+        console.error("An error occurred loading the GLB:", error);
+        dracoLoader.dispose();
+        setLoadDetail("Could not load model. Check the path or network.");
+        finishLoading(false);
+    }
+    );
+
+    function formatBytes(n) {
+      if (n < 1024) return `${n} B`;
+      if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+      return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    const geometry = new THREE.BoxGeometry();
+    const material = new THREE.MeshStandardMaterial({ color: 0x00ffcc });
+
+    // Light
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(2, 2, 5);
+    scene.add(light);
+
+    const ambientLight = new THREE.AmbientLight(0x404040);
+    scene.add(ambientLight);
+
+    // Resize handling
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+      if (model) {
+        model.rotation.y += 0.001;
+      }
+      renderer.render(scene, camera);
+    }
+
+    animate();
+  </script>
+</body>
+</html>
